@@ -10,13 +10,15 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.inttype.codereview.config.GitLabProps;
+import com.inttype.codereview.review.config.GitLabProps;
 import com.inttype.codereview.review.service.MergeRequestReviewService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @RestController
+@Slf4j
 @RequestMapping("/webhooks/gitlab")
 @RequiredArgsConstructor
 public class GitLabWebhookController {
@@ -31,13 +33,24 @@ public class GitLabWebhookController {
 		@RequestBody Map<String, Object> payload,
 		HttpServletRequest request
 	) {
-		// 0) 이벤트 타입 선검증
-		if (!"Merge Request Hook".equalsIgnoreCase(event)) {
-			return ResponseEntity.ok("ignored");
-		}
+		@SuppressWarnings("unchecked")
+		Map<String, Object> objectAttributes = (Map<String, Object>)payload.get("object_attributes");
+
+		@SuppressWarnings("unchecked")
+		Map<String, Object> project = (Map<String, Object>)payload.get("project");
+
+		// 값 꺼내기 (널 안전)
+		String action = objectAttributes != null ? String.valueOf(objectAttributes.get("action")) : null;
+		Object projId = project != null ? project.get("id") : null;
+		Object pathWithNs = project != null ? project.get("path_with_namespace") : null;
+		Object iidObj = objectAttributes != null ? objectAttributes.get("iid") : null;
+		long mrIid = (iidObj instanceof Number) ? ((Number)iidObj).longValue() : -1L;
+
+		log.info("Webhook: event={}, action={}, projId={}, path={}, iid={}",
+			event, action, projId, pathWithNs, mrIid);
 
 		// 1) 토큰 검증
-		if (token == null || !token.equals(props.webhookSecret())) {
+		if (token == null || !token.equals(props.getWebhookSecret())) {
 			return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Invalid token");
 		}
 
@@ -46,22 +59,21 @@ public class GitLabWebhookController {
 			return ResponseEntity.ok("ignored");
 		}
 
-		@SuppressWarnings("unchecked")
-		Map<String, Object> objectAttributes = (Map<String, Object>)payload.get("object_attributes");
 		if (objectAttributes == null)
 			return ResponseEntity.badRequest().body("no object_attributes");
 
-		String action = String.valueOf(objectAttributes.get("action")); // opened, reopened, update...
-		Number pid = (Number)((Map<String, Object>)payload.get("project")).get("id");
-		Number iidNum = (Number)objectAttributes.get("iid");
+		if (!(projId instanceof Number) || !(iidObj instanceof Number)) {
+			return ResponseEntity.badRequest().body("invalid project id or iid");
+		}
 
-		Object projectIdOrPath = pid;
-		long mrIid = iidNum.longValue();
-		
 		// 3) 리뷰 트리거 (논블로킹 권장: @Async)
 		if ("open".equalsIgnoreCase(action) || "opened".equalsIgnoreCase(action)
 			|| "reopen".equalsIgnoreCase(action) || "reopened".equalsIgnoreCase(action)
-			|| "update".equalsIgnoreCase(action)) {
+			|| "update".equalsIgnoreCase(action) || "updated".equalsIgnoreCase(action)) {
+
+			// projectIdOrPath는 id(Number) 또는 path_with_namespace(String) 사용 가능
+			// 여기서는 id를 우선 사용
+			Object projectIdOrPath = projId;
 			reviewService.review(projectIdOrPath, mrIid);
 		}
 

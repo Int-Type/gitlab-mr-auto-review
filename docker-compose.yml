@@ -1,0 +1,47 @@
+services:
+  codereview:
+    image: inttype/codereview:latest   # 로컬 빌드가 필요하면 build: ./codereview 유지
+    build: ./codereview
+    container_name: codereview
+    env_file:
+      - ./.env
+    expose:
+      - "8080"                 # 내부통신만 열기
+    networks:
+      - review
+    restart: always
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nginx
+    depends_on:
+      - codereview
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./certbot/www:/var/www/certbot
+      - ./certbot/conf:/etc/letsencrypt
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - review
+    restart: always
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: codereview-certbot
+    volumes:
+      - ./certbot/www:/var/www/certbot
+      - ./certbot/conf:/etc/letsencrypt
+    entrypoint: >
+      sh -c "trap exit TERM; while :; do
+      certbot renew --webroot -w /var/www/certbot --quiet && echo '🔁 certs renewed';
+      sleep 12h;
+      done"
+    networks:
+      - review
+    restart: unless-stopped
+
+networks:
+  review:
+    driver: bridge

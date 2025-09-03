@@ -50,7 +50,7 @@ tmp/
 .DS_Store
 
 ### Environment / Config ###
-.env
+../.env
 .env.*
 !env.example          # 공유용 샘플 파일은 커밋 허용
 application-*.yml

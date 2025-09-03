@@ -18,10 +18,17 @@ public class RetryReviewService {
 	private final Retry retry = Retry.ofDefaults("gitlab");
 
 	public void commentOnMr(Long projectId, Long mrIid, String comment) {
+		commentOnMrInternal(projectId, mrIid, comment);
+	}
+	public void commentOnMr(String projectPath, Long mrIid, String comment) {
+		commentOnMrInternal(projectPath, mrIid, comment);
+	}
+
+	private void commentOnMrInternal(Object projectIdOrPath, Long mrIid, String comment) {
 		Runnable runnable = Retry.decorateRunnable(retry,
 			CircuitBreaker.decorateRunnable(circuitBreaker, () -> {
 				try {
-					gitLabApi.getNotesApi().createMergeRequestNote(projectId, mrIid, comment, null, null);
+					gitLabApi.getNotesApi().createMergeRequestNote(projectIdOrPath, mrIid, comment, null, null);
 				} catch (Exception e) {
 					throw new RuntimeException(e);
 				}
@@ -29,5 +36,4 @@ public class RetryReviewService {
 		);
 		runnable.run();
 	}
-
 }
