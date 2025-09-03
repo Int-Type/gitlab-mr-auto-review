@@ -76,19 +76,13 @@ curl -i -X POST "https://<YOUR_SERVER_DOMAIN>/webhooks/gitlab" \
      openssl s_client -connect codereview.example.com:443 -servername codereview.example.com
      ```
 
----
-
 ### 🔑 403/401 오류 (비밀 토큰 불일치)
 - **원인**: GitLab Webhook의 Secret Token과 `.env`의 `GITLAB_WEBHOOK_SECRET` 값이 불일치
 - **해결 방법**: 두 값을 동일하게 맞추기
 
----
-
 ### 🔔 타 이벤트로 인한 과도한 호출
 - **원인**: Push/Issue 등 불필요한 이벤트까지 Webhook이 호출됨
 - **해결 방법**: `Merge request events`만 체크했는지 재확인
-
----
 
 ### 🔥 방화벽/보안그룹 문제
 - **원인**: 서버의 HTTPS(443) 포트가 외부에서 차단됨
