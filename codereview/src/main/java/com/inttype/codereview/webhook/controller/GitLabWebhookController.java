@@ -75,8 +75,18 @@ public class GitLabWebhookController {
 			// 여기서는 id를 우선 사용
 			Object projectIdOrPath = projId;
 			reviewService.review(projectIdOrPath, mrIid);
-		}
+			return ResponseEntity.ok("review started");
+		} else if ("close".equalsIgnoreCase(action) || "closed".equalsIgnoreCase(action)
+			|| "merge".equalsIgnoreCase(action) || "merged".equalsIgnoreCase(action)) {
 
-		return ResponseEntity.ok("ok");
+			// 닫힌/병합된 MR에 대한 처리
+			log.info("MR !{} 이 닫혔습니다. 리뷰 생성하지 않음", mrIid);
+			return ResponseEntity.ok("mr closed - no review needed");
+
+		} else {
+			// 기타 알 수 없는 action
+			log.debug("처리하지 않는 action: {}", action);
+			return ResponseEntity.ok("action ignored");
+		}
 	}
 }

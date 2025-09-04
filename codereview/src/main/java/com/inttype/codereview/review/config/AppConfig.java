@@ -23,7 +23,7 @@ import lombok.RequiredArgsConstructor;
 @EnableAspectJAutoProxy
 @RequiredArgsConstructor
 @EnableAsync
-@EnableConfigurationProperties({GitLabProps.class, LLMProps.class})
+@EnableConfigurationProperties({GitLabProps.class})
 public class AppConfig {
 
 	/**
@@ -37,18 +37,5 @@ public class AppConfig {
 	@Bean
 	public GitLabApi gitLabApi(GitLabProps props) {
 		return new GitLabApi(props.getUrl(), props.getToken());
-	}
-
-	/**
-	 * LLM 설정 Properties Bean을 명시적으로 생성합니다.
-	 *
-	 * <p>LLM 어댑터들이 의존하는 설정 정보를 제공합니다.</p>
-	 *
-	 * @return LLM 설정 Properties
-	 */
-	@Bean
-	@ConfigurationProperties(prefix = "app.llm")
-	public LLMProps llmProps() {
-		return new LLMProps();
 	}
 }

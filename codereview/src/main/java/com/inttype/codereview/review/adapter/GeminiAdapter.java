@@ -55,10 +55,10 @@ public class GeminiAdapter implements LLMAdapter {
 		}
 
 		try {
-			// WebClient 생성 (Gemini 전용 설정)
+			// WebClient 생성 (수정된 베이스 URL)
 			WebClient webClient = createWebClient();
 
-			// 프롬프트 생성 (Gemini는 시스템 프롬프트를 사용자 프롬프트에 포함)
+			// 프롬프트 생성
 			String userPrompt = promptService.getUserPrompt(diffs);
 			String combinedPrompt = combinePrompts(systemPrompt, userPrompt);
 
@@ -82,10 +82,16 @@ public class GeminiAdapter implements LLMAdapter {
 			log.debug("Gemini API 요청 시작 - 모델: {}, 파일 수: {}",
 				getModelName(), diffs != null ? diffs.size() : 0);
 
-			// API 호출 및 응답 처리 (API 키를 URL 파라미터로 추가)
-			String uri = String.format("/models/%s:generateContent?key=%s", getModelName(), getApiKey());
-			return webClient.post()
-				.uri(uri)
+			// 수정된 URI 패턴 (전체 URL을 직접 사용)
+			String fullUrl = String.format("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
+				getModelName(), getApiKey());
+
+			log.debug("요청 URL: {}", fullUrl.replace(getApiKey(), "***"));
+
+			return WebClient.create()
+				.post()
+				.uri(fullUrl)
+				.header("Content-Type", "application/json")
 				.bodyValue(request)
 				.retrieve()
 				.bodyToMono(Map.class)
