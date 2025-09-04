@@ -22,7 +22,7 @@ import reactor.core.publisher.Mono;
 /**
  * Claude API를 위한 어댑터 구현체
  *
- * <p>Claude 3 시리즈 모델들과의 통신을 담당합니다.
+ * <p>Claude 4 시리즈 모델들과의 통신을 담당합니다.
  * Anthropic API 형식에 맞춰 요청/응답을 처리하고 에러를 변환합니다.</p>
  *
  * @author inttype
@@ -34,12 +34,6 @@ import reactor.core.publisher.Mono;
 public class ClaudeAdapter implements LLMAdapter {
 
 	private static final int MAX_TOKENS = 4096;
-	/**
-	 * Claude API 스키마 버전
-	 * Claude API는 anthropic-version 헤더를 통해 API 스키마 버전을 지정해야 합니다.
-	 * 이 버전에 따라 요청/응답 형식이 달라질 수 있습니다.
-	 */
-	private static final String API_VERSION = "2023-06-01";
 
 	private final LLMProps llmProps;
 	private final PromptService promptService;
@@ -107,7 +101,7 @@ public class ClaudeAdapter implements LLMAdapter {
 
 	/**
 	 * Claude API 전용 WebClient를 생성합니다.
-	 * Claude API는 x-api-key 헤더와 anthropic-version 헤더를 사용합니다.
+	 * Claude API는 x-api-key 헤더를 사용하며, 최신 API 버전을 기본값으로 사용합니다.
 	 *
 	 * @return 설정된 WebClient 인스턴스
 	 */
@@ -121,7 +115,6 @@ public class ClaudeAdapter implements LLMAdapter {
 		return WebClient.builder()
 			.baseUrl(apiUrl)
 			.defaultHeader("x-api-key", apiKey)  // Claude는 x-api-key 사용
-			.defaultHeader("anthropic-version", API_VERSION)  // API 스키마 버전 필수
 			.defaultHeader("Content-Type", "application/json")
 			.build();
 	}
@@ -247,8 +240,8 @@ public class ClaudeAdapter implements LLMAdapter {
 			return llmProps.getClaude().getModel();
 		}
 
-		// fallback: 통합 설정에서 가져오기
-		return StringUtils.hasText(llmProps.getModel()) ? llmProps.getModel() : "claude-3-opus-20240229";
+		// fallback: 통합 설정에서 가져오기 (최신 모델로 업데이트)
+		return StringUtils.hasText(llmProps.getModel()) ? llmProps.getModel() : "claude-sonnet-4-20250514";
 	}
 
 	@Override

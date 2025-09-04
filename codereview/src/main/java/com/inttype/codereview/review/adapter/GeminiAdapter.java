@@ -299,8 +299,8 @@ public class GeminiAdapter implements LLMAdapter {
 			return llmProps.getGemini().getModel();
 		}
 
-		// fallback: 통합 설정에서 가져오기
-		return StringUtils.hasText(llmProps.getModel()) ? llmProps.getModel() : "gemini-pro";
+		// fallback: 통합 설정에서 가져오기 (기본값을 최신 모델로 업데이트)
+		return StringUtils.hasText(llmProps.getModel()) ? llmProps.getModel() : "gemini-2.5-pro";
 	}
 
 	@Override
