@@ -17,7 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 public class MergeRequestReviewService {
 
 	private final GitLabApi gitLabApi;
-	private final ChatGptReviewService chatGptReviewService;
+	private final LLMReviewService llmReviewService;
 	private final RetryReviewService retryReviewService;
 
 	@Async // 응답을 빨리 주고 백그라운드로 코멘트 달기
@@ -32,8 +32,8 @@ public class MergeRequestReviewService {
 				return;
 			}
 
-			// 2. Generate Review using Chat API (async)
-			chatGptReviewService.generateReview(diffs)
+			// 2. Generate Review using LLM API (async)
+			llmReviewService.generateReview(diffs)
 				.subscribe(
 					// onSuccess
 					reviewContent -> postComment(projectIdOrPath, mrIid, reviewContent),
