@@ -1,15 +1,34 @@
 # 🚀 GitLab Merge Request Auto Code Review
 
 **GitLab MR 자동 코드 리뷰 서비스**  
-GitLab Merge Request 이벤트가 발생하면 Webhook을 통해 Spring Boot 서버가 호출되고, OpenAI ChatGPT API를 이용해 자동으로 **코드 리뷰**를 생성하여 GitLab MR에 리뷰를 작성합니다.
+GitLab Merge Request 이벤트가 발생하면 Webhook을 통해 Spring Boot 서버가 호출되고, 다양한 LLM API(OpenAI ChatGPT, Anthropic Claude, Google Gemini) 중 한 개를 사용해 자동으로 **코드 리뷰**를 생성하여 GitLab MR에 리뷰를 작성합니다.
 
 ---
 
 ## ✨ 주요 기능
 - GitLab **Merge Request Hook** 이벤트 수신
-- MR 변경사항(Diff) 분석 및 ChatGPT API 호출
+- MR 변경사항(Diff) 분석 및 다중 LLM API 호출
+- OpenAI ChatGPT, Anthropic Claude, Google Gemini 지원
 - 한국어 기반 **자동 코드 리뷰** 작성
 - 실패 시 재시도 / CircuitBreaker / Retry 전략 적용
+
+---
+
+## 🤖 지원 LLM 모델
+#### OpenAI
+- gpt-4o-mini 
+- gpt-4o, gpt-4-turbo
+- API 키: OpenAI Platform
+
+#### Anthropic Claude
+- claude-sonnet-4-20250514 
+- claude-opus-4, claude-haiku-4
+- API 키: Anthropic Console
+
+#### Google Gemini
+- gemini-2.5
+- gemini-1.5-pro, gemini-1.5-flash
+- API 키: Google AI Studio
 
 ---
 
