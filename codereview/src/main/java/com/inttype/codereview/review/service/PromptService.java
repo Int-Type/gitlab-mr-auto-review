@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.gitlab4j.api.models.Diff;
-import org.jvnet.hk2.annotations.Service;
+import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import com.inttype.codereview.review.config.LLMProps;
@@ -26,7 +26,6 @@ import lombok.extern.slf4j.Slf4j;
 public class PromptService {
 
 	private static final int MAX_FILE_LIST = 20;
-
 
 	/**
 	 * 기본 시스템 프롬프트
@@ -62,7 +61,8 @@ public class PromptService {
 	 * GitLab MR 변경사항을 기반으로 완전한 프롬프트를 생성합니다.
 	 *
 	 * <p>시스템 프롬프트와 변경사항 기반 사용자 프롬프트를 결합하여
-	 * LLM이 바로 처리할 수 있는 완전한 프롬프트를 반환합니다.</p>
+	 * LLM이 바로 처리할 수 있는 완전한 프롬프트를 반환합니다.
+	 * Gemini처럼 시스템/사용자 프롬프트 분리를 지원하지 않는 API에서 사용됩니다.</p>
 	 *
 	 * @param diffs GitLab MR의 변경사항 목록
 	 * @return 완성된 프롬프트 (시스템 + 사용자 프롬프트 결합)
@@ -79,7 +79,7 @@ public class PromptService {
 
 	/**
 	 * 시스템 프롬프트만 반환합니다.
-	 * (OpenAI처럼 시스템/사용자 프롬프트를 분리해서 전송하는 API용)
+	 * OpenAI, Claude처럼 시스템/사용자 프롬프트를 분리해서 전송하는 API용으로 사용됩니다.
 	 *
 	 * @return 시스템 프롬프트
 	 */
@@ -95,7 +95,7 @@ public class PromptService {
 
 	/**
 	 * 사용자 프롬프트만 반환합니다.
-	 * (OpenAI처럼 시스템/사용자 프롬프트를 분리해서 전송하는 API용)
+	 * OpenAI, Claude처럼 시스템/사용자 프롬프트를 분리해서 전송하는 API용으로 사용됩니다.
 	 *
 	 * @param diffs GitLab MR의 변경사항 목록
 	 * @return 사용자 프롬프트
@@ -115,9 +115,9 @@ public class PromptService {
 
 	/**
 	 * 현재 프롬프트 설정 상태를 반환합니다.
-	 * (디버깅 및 상태 확인용)
+	 * 디버깅 및 상태 확인용으로 사용됩니다.
 	 *
-	 * @return 프롬프트 설정 정보
+	 * @return 프롬프트 설정 정보 맵
 	 */
 	public java.util.Map<String, Object> getPromptStatus() {
 		java.util.Map<String, Object> status = new java.util.HashMap<>();
@@ -131,6 +131,7 @@ public class PromptService {
 
 	/**
 	 * diff 정보를 기반으로 사용자 프롬프트를 생성합니다.
+	 * 변경된 파일 목록과 실제 diff 내용을 포함하여 구체적인 리뷰 요청을 만듭니다.
 	 *
 	 * @param diffs GitLab MR의 변경사항 목록
 	 * @return 생성된 사용자 프롬프트
@@ -173,6 +174,7 @@ public class PromptService {
 
 	/**
 	 * 변경된 파일 목록을 생성합니다.
+	 * 최대 MAX_FILE_LIST 개까지만 표시하여 프롬프트 길이를 제한합니다.
 	 *
 	 * @param diffs 변경사항 목록
 	 * @return 포맷된 파일 목록 문자열
@@ -190,6 +192,7 @@ public class PromptService {
 
 	/**
 	 * diff 정보를 프롬프트 형식으로 포맷합니다.
+	 * 각 파일별로 변경사항을 마크다운 코드 블록으로 감싸서 가독성을 높입니다.
 	 *
 	 * @param diffs 변경사항 목록
 	 * @return 포맷된 diff 문자열
@@ -207,7 +210,7 @@ public class PromptService {
 
 	/**
 	 * 시스템 프롬프트와 사용자 프롬프트를 결합합니다.
-	 * (Gemini 같이 분리된 프롬프트를 지원하지 않는 API용)
+	 * Gemini 같이 분리된 프롬프트를 지원하지 않는 API용으로 사용됩니다.
 	 *
 	 * @param systemPrompt 시스템 프롬프트
 	 * @param userPrompt 사용자 프롬프트
@@ -222,5 +225,4 @@ public class PromptService {
             %s
             """, systemPrompt, userPrompt);
 	}
-
 }

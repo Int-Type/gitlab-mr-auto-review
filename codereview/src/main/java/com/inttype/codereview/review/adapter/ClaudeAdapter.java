@@ -12,6 +12,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import com.inttype.codereview.review.config.LLMProps;
 import com.inttype.codereview.review.exception.LLMException;
+import com.inttype.codereview.review.service.PromptService;
 
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
@@ -32,11 +33,16 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class ClaudeAdapter implements LLMAdapter {
 
-	private static final int MAX_FILE_LIST = 20;
 	private static final int MAX_TOKENS = 4096;
+	/**
+	 * Claude API 스키마 버전
+	 * Claude API는 anthropic-version 헤더를 통해 API 스키마 버전을 지정해야 합니다.
+	 * 이 버전에 따라 요청/응답 형식이 달라질 수 있습니다.
+	 */
 	private static final String API_VERSION = "2023-06-01";
 
 	private final LLMProps llmProps;
+	private final PromptService promptService;
 
 	/**
 	 * Claude API를 통해 코드 리뷰를 생성합니다.
@@ -61,7 +67,7 @@ public class ClaudeAdapter implements LLMAdapter {
 			WebClient webClient = createWebClient();
 
 			// 프롬프트 생성
-			String userPrompt = buildUserPrompt(diffs);
+			String userPrompt = promptService.getUserPrompt(diffs);
 
 			// Claude API 요청 형식으로 변환
 			Map<String, Object> request = Map.of(
@@ -101,7 +107,7 @@ public class ClaudeAdapter implements LLMAdapter {
 
 	/**
 	 * Claude API 전용 WebClient를 생성합니다.
-	 * Claude API는 x-api-key 헤더를 사용합니다.
+	 * Claude API는 x-api-key 헤더와 anthropic-version 헤더를 사용합니다.
 	 *
 	 * @return 설정된 WebClient 인스턴스
 	 */
@@ -115,7 +121,7 @@ public class ClaudeAdapter implements LLMAdapter {
 		return WebClient.builder()
 			.baseUrl(apiUrl)
 			.defaultHeader("x-api-key", apiKey)  // Claude는 x-api-key 사용
-			.defaultHeader("anthropic-version", API_VERSION)
+			.defaultHeader("anthropic-version", API_VERSION)  // API 스키마 버전 필수
 			.defaultHeader("Content-Type", "application/json")
 			.build();
 	}

@@ -12,6 +12,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import com.inttype.codereview.review.config.LLMProps;
 import com.inttype.codereview.review.exception.LLMException;
+import com.inttype.codereview.review.service.PromptService;
 
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
@@ -32,9 +33,8 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class GeminiAdapter implements LLMAdapter {
 
-	private static final int MAX_FILE_LIST = 20;
-
 	private final LLMProps llmProps;
+	private final PromptService promptService;
 
 	/**
 	 * Gemini API를 통해 코드 리뷰를 생성합니다.
@@ -59,7 +59,8 @@ public class GeminiAdapter implements LLMAdapter {
 			WebClient webClient = createWebClient();
 
 			// 프롬프트 생성 (Gemini는 시스템 프롬프트를 사용자 프롬프트에 포함)
-			String combinedPrompt = combinePrompts(systemPrompt, diffs);
+			String userPrompt = promptService.getUserPrompt(diffs);
+			String combinedPrompt = combinePrompts(systemPrompt, userPrompt);
 
 			// Gemini API 요청 형식으로 변환
 			Map<String, Object> request = Map.of(
@@ -81,8 +82,8 @@ public class GeminiAdapter implements LLMAdapter {
 			log.debug("Gemini API 요청 시작 - 모델: {}, 파일 수: {}",
 				getModelName(), diffs != null ? diffs.size() : 0);
 
-			// API 호출 및 응답 처리
-			String uri = String.format("/models/%s:generateContent", getModelName());
+			// API 호출 및 응답 처리 (API 키를 URL 파라미터로 추가)
+			String uri = String.format("/models/%s:generateContent?key=%s", getModelName(), getApiKey());
 			return webClient.post()
 				.uri(uri)
 				.bodyValue(request)

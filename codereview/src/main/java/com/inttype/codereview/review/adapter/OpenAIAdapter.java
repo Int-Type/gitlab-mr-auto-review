@@ -14,6 +14,7 @@ import com.inttype.codereview.review.dto.ChatMessage;
 import com.inttype.codereview.review.dto.ChatRequest;
 import com.inttype.codereview.review.dto.ChatResponse;
 import com.inttype.codereview.review.exception.LLMException;
+import com.inttype.codereview.review.service.PromptService;
 
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
@@ -34,10 +35,10 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class OpenAIAdapter implements LLMAdapter {
 
-	private static final int MAX_FILE_LIST = 20;
 	private static final double DEFAULT_TEMPERATURE = 0.2;
 
 	private final LLMProps llmProps;
+	private final PromptService promptService;
 
 	/**
 	 * OpenAI API를 통해 코드 리뷰를 생성합니다.
@@ -62,7 +63,7 @@ public class OpenAIAdapter implements LLMAdapter {
 			WebClient webClient = createWebClient();
 
 			// 프롬프트 생성
-			String userPrompt = buildUserPrompt(diffs);
+			String userPrompt = promptService.getUserPrompt(diffs);
 
 			// API 요청 생성
 			ChatRequest request = new ChatRequest(
@@ -219,7 +220,7 @@ public class OpenAIAdapter implements LLMAdapter {
 			return llmProps.getOpenai().getModel();
 		}
 
-		// fallback: 통합 설정에서 가져오기 
+		// fallback: 통합 설정에서 가져오기
 		return StringUtils.hasText(llmProps.getModel()) ? llmProps.getModel() : "gpt-4o-mini";
 	}
 
