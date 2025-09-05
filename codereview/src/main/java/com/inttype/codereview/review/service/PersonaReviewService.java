@@ -119,12 +119,19 @@ public class PersonaReviewService {
 	private String generatePersonaPrompt(PersonaType persona) {
 		// 페르소나별 전문성과 정체성 정의
 		String personaIdentity = switch (persona) {
+			// 도메인별 전문가
 			case SECURITY_AUDITOR -> "10년차 보안 전문가";
 			case PERFORMANCE_TUNER -> "10년차 성능 엔지니어";
 			case DATA_GUARDIAN -> "10년차 데이터베이스 전문가";
 			case BUSINESS_ANALYST -> "10년차 비즈니스 로직 전문가";
 			case ARCHITECT -> "10년차 소프트웨어 아키텍트";
 			case QUALITY_COACH -> "10년차 코드 품질 전문가";
+			// 기술 스택별 전문가
+			case BACKEND_SPECIALIST -> "10년차 백엔드 개발자";
+			case FRONTEND_SPECIALIST -> "10년차 프론트엔드 개발자";
+			case DEVOPS_ENGINEER -> "10년차 데브옵스 엔지니어";
+			case DATA_SCIENTIST -> "10년차 빅데이터/AI 전문가";
+			// 기본 리뷰어
 			case GENERAL_REVIEWER -> "10년차 풀스택 개발자";
 		};
 
@@ -136,6 +143,10 @@ public class PersonaReviewService {
 			case BUSINESS_ANALYST -> "비즈니스 요구사항 구현에 대해 다른 관점은 있을까요?";
 			case ARCHITECT -> "전체 아키텍처 관점에서 추가 의견이 있으시다면?";
 			case QUALITY_COACH -> "코드 품질이나 테스트 관점에서 어떻게 보시나요?";
+			case BACKEND_SPECIALIST -> "백엔드 구현이나 API 설계 측면에서 어떤 생각이신가요?";
+			case FRONTEND_SPECIALIST -> "사용자 경험이나 프론트엔드 구조에 대해 어떻게 생각하시나요?";
+			case DEVOPS_ENGINEER -> "배포나 인프라 운영 관점에서 고려사항이 있을까요?";
+			case DATA_SCIENTIST -> "데이터 모델링이나 AI/ML 파이프라인에 대한 의견은 어떠신가요?";
 			case GENERAL_REVIEWER -> "전반적으로 놓친 부분이나 다른 관점이 있을까요?";
 		};
 
@@ -159,6 +170,18 @@ public class PersonaReviewService {
 			case QUALITY_COACH -> """
 				특히 테스트 코드, 가독성, 명명 규칙, 코드 컨벤션에 집중합니다.
 				품질 개선이 필요한 부분이 있다면 실용적인 리팩토링 방안을 알려드립니다.""";
+			case BACKEND_SPECIALIST -> """
+				특히 Spring Boot, FastAPI 등 백엔드 프레임워크, API 설계, 서버 아키텍처에 집중합니다.
+				백엔드 로직이나 API 구조에 개선점이 있다면 확장성과 유지보수성을 고려한 방안을 제시합니다.""";
+			case FRONTEND_SPECIALIST -> """
+				특히 React 컴포넌트 구조, 상태 관리, 사용자 인터페이스, 성능 최적화에 집중합니다.
+				프론트엔드 코드나 사용자 경험에 개선점이 있다면 모던한 개발 패턴을 제안합니다.""";
+			case DEVOPS_ENGINEER -> """
+				특히 Docker, Kubernetes, CI/CD 파이프라인, 모니터링, 인프라 보안에 집중합니다.
+				배포나 운영 관점에서 개선점이 있다면 안정성과 확장성을 고려한 해결책을 제시합니다.""";
+			case DATA_SCIENTIST -> """
+				특히 Python 데이터 처리, 머신러닝 모델, 추천시스템, 빅데이터 파이프라인에 집중합니다.
+				데이터 분석이나 AI/ML 코드에 개선점이 있다면 성능과 정확도를 고려한 방안을 제안합니다.""";
 			case GENERAL_REVIEWER -> """
 				코드 전반의 품질, 기본적인 버그, 가독성, 유지보수성을 종합적으로 검토합니다.
 				다양한 관점에서 균형잡힌 개선 의견을 드립니다.""";

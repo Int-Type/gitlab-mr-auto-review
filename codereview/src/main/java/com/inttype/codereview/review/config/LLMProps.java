@@ -32,6 +32,7 @@ public class LLMProps {
 	private String systemPrompt;
 
 	// OpenAI 호환 API 사용 여부
+	@Builder.Default
 	private boolean openaiCompatible = true;
 
 	// 다양한 LLM 서비스별 설정
@@ -47,8 +48,10 @@ public class LLMProps {
 	@NoArgsConstructor
 	@AllArgsConstructor
 	public static class OpenAI {
+		@Builder.Default
 		private String apiUrl = "https://api.openai.com/v1";
 		private String apiKey;
+		@Builder.Default
 		private String model = "gpt-4o-mini";
 	}
 
@@ -60,8 +63,10 @@ public class LLMProps {
 	@NoArgsConstructor
 	@AllArgsConstructor
 	public static class Claude {
+		@Builder.Default
 		private String apiUrl = "https://api.anthropic.com/v1";
 		private String apiKey;
+		@Builder.Default
 		private String model = "claude-sonnet-4-20250514";
 	}
 
@@ -73,8 +78,10 @@ public class LLMProps {
 	@NoArgsConstructor
 	@AllArgsConstructor
 	public static class Gemini {
+		@Builder.Default
 		private String apiUrl = "https://generativelanguage.googleapis.com/v1beta";
 		private String apiKey;
+		@Builder.Default
 		private String model = "gemini-2.5-pro";
 	}
 }

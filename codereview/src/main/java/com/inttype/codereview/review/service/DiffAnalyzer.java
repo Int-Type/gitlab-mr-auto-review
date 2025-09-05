@@ -181,6 +181,42 @@ public class DiffAnalyzer {
 			scores.merge(PersonaType.DATA_GUARDIAN, (int)Math.min(databaseMatches * 5, 20), Integer::sum);
 			log.debug("데이터베이스 키워드 집합 매칭: {} 개, +{}", databaseMatches, Math.min(databaseMatches * 5, 20));
 		}
+
+		// 프론트엔드 키워드 검사
+		long frontendMatches = PersonaWeightConfig.FRONTEND_KEYWORDS.stream()
+			.mapToLong(keyword -> countMatches(lowerContent, keyword))
+			.sum();
+		if (frontendMatches > 0) {
+			scores.merge(PersonaType.FRONTEND_SPECIALIST, (int)Math.min(frontendMatches * 5, 20), Integer::sum);
+			log.debug("프론트엔드 키워드 집합 매칭: {} 개, +{}", frontendMatches, Math.min(frontendMatches * 5, 20));
+		}
+
+		// 백엔드 키워드 검사
+		long backendMatches = PersonaWeightConfig.BACKEND_KEYWORDS.stream()
+			.mapToLong(keyword -> countMatches(lowerContent, keyword))
+			.sum();
+		if (backendMatches > 0) {
+			scores.merge(PersonaType.BACKEND_SPECIALIST, (int)Math.min(backendMatches * 5, 20), Integer::sum);
+			log.debug("백엔드 키워드 집합 매칭: {} 개, +{}", backendMatches, Math.min(backendMatches * 5, 20));
+		}
+
+		// 데브옵스 키워드 검사
+		long devopsMatches = PersonaWeightConfig.DEVOPS_KEYWORDS.stream()
+			.mapToLong(keyword -> countMatches(lowerContent, keyword))
+			.sum();
+		if (devopsMatches > 0) {
+			scores.merge(PersonaType.DEVOPS_ENGINEER, (int)Math.min(devopsMatches * 5, 20), Integer::sum);
+			log.debug("데브옵스 키워드 집합 매칭: {} 개, +{}", devopsMatches, Math.min(devopsMatches * 5, 20));
+		}
+
+		// 데이터 사이언스 키워드 검사
+		long dataScienceMatches = PersonaWeightConfig.DATA_SCIENCE_KEYWORDS.stream()
+			.mapToLong(keyword -> countMatches(lowerContent, keyword))
+			.sum();
+		if (dataScienceMatches > 0) {
+			scores.merge(PersonaType.DATA_SCIENTIST, (int)Math.min(dataScienceMatches * 5, 20), Integer::sum);
+			log.debug("데이터 사이언스 키워드 집합 매칭: {} 개, +{}", dataScienceMatches, Math.min(dataScienceMatches * 5, 20));
+		}
 	}
 
 	/**
