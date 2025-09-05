@@ -9,8 +9,59 @@ GitLab Merge Request 이벤트가 발생하면 Webhook을 통해 Spring Boot 서
 - GitLab **Merge Request Hook** 이벤트 수신
 - MR 변경사항(Diff) 분석 및 다중 LLM API 호출
 - OpenAI ChatGPT, Anthropic Claude, Google Gemini 지원
+- **페르소나 기반 전문화된 리뷰** - 변경사항에 따라 적절한 전문가 관점 자동 선택
 - 한국어 기반 **자동 코드 리뷰** 작성
 - 실패 시 재시도 / CircuitBreaker / Retry 전략 적용
+
+---
+
+
+## 🤖 AI 페르소나 시스템
+
+### 🎭 지원하는 전문가 페르소나
+변경사항을 자동 분석하여 가장 적절한 전문가 페르소나를 선택합니다.
+
+#### 🔍 도메인별 전문가
+| 아이콘 | 페르소나 | 설명 |
+|--------|-----------|------|
+| 🔒 | **Security Auditor** | 보안 취약점, 인증/인가, 입력 검증 전문 |
+| ⚡ | **Performance Tuner** | 성능 최적화, 쿼리 튜닝, 메모리 사용량 전문 |
+| 🗃️ | **Data Guardian** | 데이터베이스, 트랜잭션, 데이터 정합성 전문 |
+| 💼 | **Business Analyst** | 비즈니스 로직, 도메인 규칙, 요구사항 전문 |
+| 🏗️ | **Architect** | 소프트웨어 아키텍처, 설계 패턴, 의존성 관리 전문 |
+| ✅ | **Quality Coach** | 코드 품질, 테스트 전략, 컨벤션 전문 |
+
+#### 🛠️ 기술 스택별 전문가
+| 아이콘 | 페르소나 | 설명 |
+|--------|-----------|------|
+| ⚙️ | **Backend Specialist** | Spring Boot, FastAPI, 서버 아키텍처 전문 |
+| 🎨 | **Frontend Specialist** | React, JavaScript/TypeScript, UI/UX 전문 |
+| 🚀 | **DevOps Engineer** | Docker, Kubernetes, CI/CD, 인프라 전문 |
+| 📊 | **Data Scientist** | Python, 머신러닝, 빅데이터, AI/ML 파이프라인 전문 |
+| 🤖 | **General Reviewer** | 종합적인 코드 품질 검토 |
+
+---
+
+
+### 🧠 스마트 페르소나 선택 시스템
+- **파일 경로 분석**: controller, service, component 등 경로 패턴
+- **파일 확장자 분석**: `.java`, `.py`, `.js`, `.tsx`, `.sql` 등
+- **코드 키워드**: `@PreAuthorize`, `@Cacheable`, `useState` 등 프레임워크별 어노테이션
+- **복잡도 패턴**: 중첩 반복문, 예외 처리, 비동기 코드 등
+- **임계값 기반 선택**  
+  - 40점 이상: 전문 페르소나 자동 활성화  
+  - 60점 이상: 추가 점검용 다른 페르소나도 함께 제안
+
+---
+
+### 📝 리뷰 모드 설정
+```properties
+# 페르소나 기반 전문화된 리뷰 (권장)
+app.review.mode=persona
+
+# 기존 통합 LLM 리뷰
+app.review.mode=integrated
+```
 
 ---
 
@@ -109,7 +160,7 @@ curl -i -X POST "https://<YOUR_SERVER_DOMAIN>/webhooks/gitlab" \
 
 ---
 
-## 6) 동작 흐름 (요약)
+## 6) 동작 흐름 (기존 방식)
 
 1. MR 생성/수정 → GitLab이 Webhook 호출  
 2. 서버가 Secret Token 검증 후 MR 변경사항 조회  
@@ -125,8 +176,40 @@ sequenceDiagram
 
   GitLab->>Server: Webhook (Merge Request)
   Server->>GitLab: MR changes 조회
-  Server->>ChatGPT: Diff 전달
-  ChatGPT-->>Server: 리뷰 텍스트
+  Server->>LLM: Diff 전달
+  LLM-->>Server: 리뷰 텍스트
   Server->>GitLab: MR 댓글 등록
   GitLab->>MR: 리뷰 표시
+```
+
+---
+
+## 7) 동작 흐름 (페르소나 모드)
+
+1. MR 생성/수정 → GitLab이 Webhook 호출
+2. 서버가 Secret Token 검증 후 MR 변경사항 조회
+3. diff 분석 → 페르소나별 점수 계산
+4. 최적 페르소나 선택 (예: Backend Specialist)
+5. 전문화된 프롬프트 생성 → LLM API 호출
+6. 페르소나 리뷰 생성 → GitLab MR에 댓글 등록
+
+```mermaid
+sequenceDiagram
+  participant GitLab
+  participant Server
+  participant DiffAnalyzer
+  participant PersonaService
+  participant LLM
+  participant MR
+
+  GitLab->>Server: Webhook (Merge Request)
+  Server->>GitLab: MR changes 조회
+  Server->>DiffAnalyzer: diff 분석
+  DiffAnalyzer-->>Server: 페르소나 점수
+  Server->>PersonaService: 페르소나 선택
+  PersonaService->>LLM: 전문화된 프롬프트
+  LLM-->>PersonaService: 전문가 리뷰
+  PersonaService-->>Server: 포맷된 리뷰
+  Server->>GitLab: MR 댓글 등록
+  GitLab->>MR: 페르소나 리뷰 표시
 ```
