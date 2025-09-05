@@ -1,7 +1,6 @@
 package com.inttype.codereview.review.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
 import lombok.Data;
@@ -16,7 +15,6 @@ import lombok.Data;
  */
 @Data
 @Validated
-@Component
 @ConfigurationProperties(prefix = "app.review")
 public class ReviewModeConfig {
 
