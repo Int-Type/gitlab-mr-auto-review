@@ -5,13 +5,11 @@ import java.util.List;
 import org.gitlab4j.api.GitLabApi;
 import org.gitlab4j.api.models.Diff;
 import org.gitlab4j.api.models.MergeRequest;
-import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import com.inttype.codereview.review.persona.PersonaReviewService;
+import com.inttype.codereview.review.config.ReviewModeConfig;
 
-import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -140,39 +138,6 @@ public class MergeRequestReviewService {
 			log.debug("MR !{} 댓글 게시 완료", mrIid);
 		} catch (Exception e) {
 			log.error("MR !{} 댓글 게시 실패: {}", mrIid, e.getMessage(), e);
-		}
-	}
-
-	/**
-	 * 리뷰 모드 설정을 관리하는 Configuration Properties
-	 */
-	@Data
-	@ConfigurationProperties(prefix = "app.review")
-	public static class ReviewModeConfig {
-
-		/**
-		 * 리뷰 모드 ("persona" 또는 "integrated")
-		 * - persona: 페르소나 기반 전문화된 리뷰
-		 * - integrated: 기존 통합 LLM 리뷰
-		 */
-		private String mode = "persona";
-
-		/**
-		 * 페르소나 모드 사용 여부를 확인합니다.
-		 *
-		 * @return 페르소나 모드인 경우 true
-		 */
-		public boolean isPersonaMode() {
-			return "persona".equalsIgnoreCase(mode);
-		}
-
-		/**
-		 * 통합 모드 사용 여부를 확인합니다.
-		 *
-		 * @return 통합 모드인 경우 true
-		 */
-		public boolean isIntegratedMode() {
-			return "integrated".equalsIgnoreCase(mode);
 		}
 	}
 }

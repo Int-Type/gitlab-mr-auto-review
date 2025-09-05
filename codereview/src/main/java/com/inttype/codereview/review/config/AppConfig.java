@@ -1,7 +1,6 @@
 package com.inttype.codereview.review.config;
 
 import org.gitlab4j.api.GitLabApi;
-import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,7 +22,11 @@ import lombok.RequiredArgsConstructor;
 @EnableAspectJAutoProxy
 @RequiredArgsConstructor
 @EnableAsync
-@EnableConfigurationProperties({GitLabProps.class})
+@EnableConfigurationProperties({
+	GitLabProps.class,
+	LLMProps.class,
+	ReviewModeConfig.class
+})
 public class AppConfig {
 
 	/**
