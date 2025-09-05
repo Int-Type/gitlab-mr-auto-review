@@ -5,17 +5,18 @@ import java.util.stream.Collectors;
 
 import org.gitlab4j.api.models.Diff;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
-import com.inttype.codereview.review.config.LLMProps;
+import com.inttype.codereview.review.config.ReviewModeConfig;
+import com.inttype.codereview.review.domain.PersonaType;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
  * 코드 리뷰용 프롬프트 생성 및 관리 전담 서비스
- * 시스템 프롬프트와 사용자 프롬프트를 통합 관리하여
- * 일관된 리뷰 품질을 보장하고 프롬프트 변경을 중앙화합니다.
+ *
+ * <p>기본 베이스 프롬프트 + 페르소나별 전문성 + diff 내용을 조합하여
+ * 완전한 프롬프트를 생성합니다. 모든 프롬프트는 하드코딩으로 관리됩니다.</p>
  *
  * @author inttype
  * @since 1.0
@@ -26,82 +27,60 @@ import lombok.extern.slf4j.Slf4j;
 public class PromptService {
 
 	private static final int MAX_FILE_LIST = 20;
-
 	/**
-	 * 기본 시스템 프롬프트
-	 * 모든 LLM에서 공통으로 사용되는 리뷰 가이드라인
+	 * 모든 리뷰에서 공통으로 사용되는 기본 베이스 프롬프트
+	 * diff 해석 규칙, 리뷰 포맷, 작성 가이드라인 등 공통 규칙 포함
 	 */
-	private static final String DEFAULT_SYSTEM_PROMPT = """
-        당신은 숙련된 코드 리뷰어입니다.
-        목표: GitLab MR에 대해 한국어로, 친절하고 명확하며 실행 가능한 리뷰를 작성합니다.
-        
-        [톤 & 구조]
-        - 첫 문단: 인사 + 요약 칭찬 + 전반 평가 (변경 의도와 결과를 현재 코드 기준으로 서술)
-        - 이후: 2~5개의 구체 개선 제안 (근거/이유 포함), 각 항목에 우선순위 [필수/권장/고려] 표기
-        - 과한 장황함 금지, 파일/라인/코드 맥락을 구체적으로 언급
-        - 프로젝트 컨벤션/성능/보안/테스트/운영 관점 균형
-        
-        [중요: diff 해석 규칙]
-        - unified diff의 `-`는 "과거 코드(제거됨)"를, `+`는 "현재 코드(추가/수정됨)"를 의미합니다.
-        - `-`에서 보인 문제를 `+`에서 해결했으면, 이는 "이번 MR에서 해결됨"으로 칭찬/기록합니다.
-        - 이미 해결/수정된 사항을 "현재도 남아있는 문제"처럼 오해할 표현은 절대 금지합니다.
-        - 개선 제안 섹션에는 "현재 코드 기준으로 추가 조치가 필요한 항목"만 포함합니다.
-        - 과거 오타/코드스멜이 이번 MR로 바로잡혔다면 "정정/정리 완료"로 긍정적으로 표현하세요.
-        
-        [표현 가이드]
-        - 첫 문장: "안녕하세요. MR 잘 봤습니다."로 시작
-        - 칭찬 1~2개 → 개선 2~5개(우선순위 포함) → (선택) 총평
-        - 라인 인용은 파일명:행번호 형태로 간단 표기(가능한 경우)
-        - 반드시 사실에만 근거하고 추측/단정 금지
-        """;
-
-	private final LLMProps llmProps;
+	private static final String BASE_PROMPT = """
+		[diff 해석 규칙 (필수)]
+		- unified diff의 `-`는 "과거 코드(제거됨)"를, `+`는 "현재 코드(추가/수정됨)"를 의미합니다.
+		- 이미 해결/수정된 사항을 "현재도 남아있는 문제"처럼 오해할 표현은 절대 금지합니다.
+		- 개선 제안 섹션에는 "현재 코드 기준으로 추가 조치가 필요한 항목"만 포함합니다.
+		
+		[작성 가이드라인]
+		- 전체 코드를 검토한 후 정말 중요한 이슈만 2-3개 선별해서 리뷰하세요.
+		- 마크다운 형식(#, ##, - 등)을 절대 사용하지 마세요.
+		- 파일별 구분이나 섹션 구분 없이, 일반 텍스트로만 작성하세요.
+		- 자연스러운 대화체로 작성하되, 한 문단의 길이는 5-6문장을 넘지 않도록 하세요.
+		- "안녕하세요. MR 잘 봤습니다."로 가볍게 시작하세요.
+		- 반드시 사실에만 근거하고 추측/단정 금지
+		
+		""";
+	private final ReviewModeConfig reviewModeConfig;
 
 	/**
-	 * GitLab MR 변경사항을 기반으로 완전한 프롬프트를 생성합니다.
-	 *
-	 * <p>시스템 프롬프트와 변경사항 기반 사용자 프롬프트를 결합하여
-	 * LLM이 바로 처리할 수 있는 완전한 프롬프트를 반환합니다.
-	 * Gemini처럼 시스템/사용자 프롬프트 분리를 지원하지 않는 API에서 사용됩니다.</p>
+	 * 통합 LLM 모드용 완전한 프롬프트를 생성합니다.
 	 *
 	 * @param diffs GitLab MR의 변경사항 목록
-	 * @return 완성된 프롬프트 (시스템 + 사용자 프롬프트 결합)
+	 * @return 완성된 프롬프트
 	 */
-	public String buildCompletePrompt(List<Diff> diffs) {
-		String systemPrompt = getSystemPrompt();
-		String userPrompt = buildUserPrompt(diffs);
+	public String buildIntegratedPrompt(List<Diff> diffs) {
+		log.debug("통합 모드 프롬프트 생성 - 파일 수: {}", diffs != null ? diffs.size() : 0);
 
-		log.debug("프롬프트 생성 완료 - 파일 수: {}, 시스템 프롬프트 길이: {}",
-			diffs != null ? diffs.size() : 0, systemPrompt.length());
+		String generalReviewerIdentity = """
+			당신은 10년차 풀스택 개발자입니다. 
+			코드 전반의 품질, 기본적인 버그, 가독성, 유지보수성을 종합적으로 검토합니다.
+			다양한 관점에서 균형잡힌 개선 의견을 드립니다.
+			
+			마지막에는 "전반적으로 놓친 부분이나 다른 관점이 있을까요?"와 같은 열린 질문으로 마무리하세요.
+			""";
 
-		return combinePrompts(systemPrompt, userPrompt);
+		return combinePrompt(generalReviewerIdentity, diffs);
 	}
 
 	/**
-	 * 시스템 프롬프트만 반환합니다.
-	 * OpenAI, Claude처럼 시스템/사용자 프롬프트를 분리해서 전송하는 API용으로 사용됩니다.
+	 * 페르소나별 완전한 프롬프트를 생성합니다.
 	 *
-	 * @return 시스템 프롬프트
-	 */
-	public String getSystemPrompt() {
-		if (StringUtils.hasText(llmProps.getSystemPrompt())) {
-			log.debug("설정된 커스텀 시스템 프롬프트 사용");
-			return llmProps.getSystemPrompt();
-		}
-
-		log.debug("기본 시스템 프롬프트 사용");
-		return DEFAULT_SYSTEM_PROMPT;
-	}
-
-	/**
-	 * 사용자 프롬프트만 반환합니다.
-	 * OpenAI, Claude처럼 시스템/사용자 프롬프트를 분리해서 전송하는 API용으로 사용됩니다.
-	 *
+	 * @param persona 선택된 페르소나 타입
 	 * @param diffs GitLab MR의 변경사항 목록
-	 * @return 사용자 프롬프트
+	 * @return 페르소나별 완성된 프롬프트
 	 */
-	public String getUserPrompt(List<Diff> diffs) {
-		return buildUserPrompt(diffs);
+	public String buildPersonaPrompt(PersonaType persona, List<Diff> diffs) {
+		log.debug("페르소나 프롬프트 생성 - 페르소나: {}, 파일 수: {}",
+			persona.getDisplayName(), diffs != null ? diffs.size() : 0);
+
+		String personaSpecificContent = getPersonaSpecificContent(persona);
+		return combinePrompt(personaSpecificContent, diffs);
 	}
 
 	/**
@@ -115,57 +94,140 @@ public class PromptService {
 
 	/**
 	 * 현재 프롬프트 설정 상태를 반환합니다.
-	 * 디버깅 및 상태 확인용으로 사용됩니다.
 	 *
 	 * @return 프롬프트 설정 정보 맵
 	 */
 	public java.util.Map<String, Object> getPromptStatus() {
 		java.util.Map<String, Object> status = new java.util.HashMap<>();
 
-		status.put("customSystemPromptConfigured", StringUtils.hasText(llmProps.getSystemPrompt()));
-		status.put("systemPromptLength", getSystemPrompt().length());
-		status.put("defaultSystemPromptUsed", !StringUtils.hasText(llmProps.getSystemPrompt()));
+		status.put("reviewMode", reviewModeConfig.getMode());
+		status.put("isPersonaMode", reviewModeConfig.isPersonaMode());
+		status.put("isIntegratedMode", reviewModeConfig.isIntegratedMode());
+		status.put("promptSource", "hardcoded");
+		status.put("basePromptLength", BASE_PROMPT.length());
 
 		return status;
 	}
 
 	/**
-	 * diff 정보를 기반으로 사용자 프롬프트를 생성합니다.
-	 * 변경된 파일 목록과 실제 diff 내용을 포함하여 구체적인 리뷰 요청을 만듭니다.
+	 * 페르소나별 전문성 내용을 반환합니다.
 	 *
-	 * @param diffs GitLab MR의 변경사항 목록
-	 * @return 생성된 사용자 프롬프트
+	 * @param persona 페르소나 타입
+	 * @return 페르소나별 전문성 내용
 	 */
-	private String buildUserPrompt(List<Diff> diffs) {
+	private String getPersonaSpecificContent(PersonaType persona) {
+		// 페르소나별 정체성
+		String personaIdentity = switch (persona) {
+			// 도메인별 전문가
+			case SECURITY_AUDITOR -> "10년차 보안 전문가";
+			case PERFORMANCE_TUNER -> "10년차 성능 엔지니어";
+			case DATA_GUARDIAN -> "10년차 데이터베이스 전문가";
+			case BUSINESS_ANALYST -> "10년차 비즈니스 로직 전문가";
+			case ARCHITECT -> "10년차 소프트웨어 아키텍트";
+			case QUALITY_COACH -> "10년차 코드 품질 전문가";
+			// 기술 스택별 전문가
+			case BACKEND_SPECIALIST -> "10년차 백엔드 개발자";
+			case FRONTEND_SPECIALIST -> "10년차 프론트엔드 개발자";
+			case DEVOPS_ENGINEER -> "10년차 데브옵스 엔지니어";
+			case DATA_SCIENTIST -> "10년차 빅데이터/AI 전문가";
+			// 기본 리뷰어
+			case GENERAL_REVIEWER -> "10년차 풀스택 개발자";
+		};
+
+		// 페르소나별 핵심 관심사
+		String coreInterests = switch (persona) {
+			case SECURITY_AUDITOR -> """
+				특히 인증/인가 로직, 입력 검증, 민감 정보 노출, 웹 보안 이슈에 주의깊게 살펴봅니다.
+				보안 취약점이나 위험 요소가 있다면 구체적인 개선 방안과 함께 알려드립니다.""";
+			case PERFORMANCE_TUNER -> """
+				특히 데이터베이스 쿼리 최적화, 메모리 사용량, 알고리즘 효율성, 캐싱 전략에 집중합니다.
+				성능 병목이나 최적화 기회가 보이면 측정 가능한 개선안을 제시합니다.""";
+			case DATA_GUARDIAN -> """
+				특히 트랜잭션 처리, 데이터 정합성, 쿼리 성능, 동시성 제어에 중점을 둡니다.
+				데이터 관련 이슈나 개선점이 있으면 안전한 해결책을 함께 제안합니다.""";
+			case BUSINESS_ANALYST -> """
+				특히 요구사항 구현의 정확성, 비즈니스 규칙 준수, 예외 처리에 초점을 맞춥니다.
+				도메인 로직이나 워크플로우에 문제가 있다면 비즈니스 관점에서 개선안을 드립니다.""";
+			case ARCHITECT -> """
+				특히 레이어 분리, 의존성 관리, 모듈 구조, 확장성에 관심을 가집니다.
+				아키텍처 개선이 필요한 부분이 있다면 장기적 관점에서 해결책을 제시합니다.""";
+			case QUALITY_COACH -> """
+				특히 테스트 코드, 가독성, 명명 규칙, 코드 컨벤션에 집중합니다.
+				품질 개선이 필요한 부분이 있다면 실용적인 리팩토링 방안을 알려드립니다.""";
+			case BACKEND_SPECIALIST -> """
+				특히 Spring Boot, FastAPI 등 백엔드 프레임워크, API 설계, 서버 아키텍처에 집중합니다.
+				백엔드 로직이나 API 구조에 개선점이 있다면 확장성과 유지보수성을 고려한 방안을 제시합니다.""";
+			case FRONTEND_SPECIALIST -> """
+				특히 React 컴포넌트 구조, 상태 관리, 사용자 인터페이스, 성능 최적화에 집중합니다.
+				프론트엔드 코드나 사용자 경험에 개선점이 있다면 모던한 개발 패턴을 제안합니다.""";
+			case DEVOPS_ENGINEER -> """
+				특히 Docker, Kubernetes, CI/CD 파이프라인, 모니터링, 인프라 보안에 집중합니다.
+				배포나 운영 관점에서 개선점이 있다면 안정성과 확장성을 고려한 해결책을 제시합니다.""";
+			case DATA_SCIENTIST -> """
+				특히 Python 데이터 처리, 머신러닝 모델, 추천시스템, 빅데이터 파이프라인에 집중합니다.
+				데이터 분석이나 AI/ML 코드에 개선점이 있다면 성능과 정확도를 고려한 방안을 제안합니다.""";
+			case GENERAL_REVIEWER -> """
+				코드 전반의 품질, 기본적인 버그, 가독성, 유지보수성을 종합적으로 검토합니다.
+				다양한 관점에서 균형잡힌 개선 의견을 드립니다.""";
+		};
+
+		// 페르소나별 마무리 질문
+		String closingQuestion = switch (persona) {
+			case SECURITY_AUDITOR -> "보안 관점에서 추가로 고려해볼 부분이 있을까요?";
+			case PERFORMANCE_TUNER -> "성능 최적화 측면에서 다른 의견은 어떠신가요?";
+			case DATA_GUARDIAN -> "데이터 정합성이나 트랜잭션 관점에서 어떻게 생각하시나요?";
+			case BUSINESS_ANALYST -> "비즈니스 요구사항 구현에 대해 다른 관점은 있을까요?";
+			case ARCHITECT -> "전체 아키텍처 관점에서 추가 의견이 있으시다면?";
+			case QUALITY_COACH -> "코드 품질이나 테스트 관점에서 어떻게 보시나요?";
+			case BACKEND_SPECIALIST -> "백엔드 구현이나 API 설계 측면에서 어떤 생각이신가요?";
+			case FRONTEND_SPECIALIST -> "사용자 경험이나 프론트엔드 구조에 대해 어떻게 생각하시나요?";
+			case DEVOPS_ENGINEER -> "배포나 인프라 운영 관점에서 고려사항이 있을까요?";
+			case DATA_SCIENTIST -> "데이터 모델링이나 AI/ML 파이프라인에 대한 의견은 어떠신가요?";
+			case GENERAL_REVIEWER -> "전반적으로 놓친 부분이나 다른 관점이 있을까요?";
+		};
+
+		return String.format("""
+			당신은 %s입니다. 같은 팀의 동료가 제출한 MR을 리뷰합니다.
+			
+			%s
+			
+			마지막에는 "%s"와 같은 열린 질문으로 마무리하세요.
+			""", personaIdentity, coreInterests, closingQuestion);
+	}
+
+	/**
+	 * 베이스 프롬프트 + 페르소나별 내용 + diff를 조합하여 완전한 프롬프트를 생성합니다.
+	 *
+	 * @param personaContent 페르소나별 전문성 내용
+	 * @param diffs 변경사항 목록
+	 * @return 완성된 프롬프트
+	 */
+	private String combinePrompt(String personaContent, List<Diff> diffs) {
+		if (diffs == null || diffs.isEmpty()) {
+			return getNoChangesMessage();
+		}
+
 		String fileList = generateFileList(diffs);
 		String diffContent = formatDiffsForPrompt(diffs);
 
 		return String.format("""
-            다음 변경사항에 대해 위의 규칙을 지켜 리뷰를 작성하세요.
-            
-            [컨텍스트]
-            - 변경 파일 수: %d
-            - 변경 파일 목록(상위 %d개까지 표시):
-            %s
-            
-            [diff 해석 규칙(엄수)]
-            - unified diff의 `-`는 과거 상태(제거된 코드), `+`는 현재 상태(이번 MR 반영 후)입니다.
-            - `-`에서 문제가 있었고 `+`에서 해결된 경우, "이번 MR에서 해결됨/정리됨"으로 칭찬·요약만 하세요.
-            - 이미 해결된 항목을 개선 제안에 넣지 마세요. 개선 제안에는 "현재 기준으로 남은 액션"만 포함하세요.
-            - 남은 리스크/테스트 보완/컨벤션/보안·성능 관점에서의 추가 조치가 있다면 구체적으로 제시하세요.
-            
-            [리뷰 출력 포맷(엄수)]
-            1) 인사 + 요약 칭찬/전반 평가 (2~4문장, 현재 상태 기준으로 작성)
-            2) 개선 제안 (2~5개, 각 항목에 우선순위 [필수/권장/고려] 표기)
-               - 형식: [우선순위] 파일명:행번호 - 한 줄 제목
-                 근거/이유 (1~2문장, 현재 코드 기준)
-                 간단한 대안/예시 (필요 시 1~5줄 코드블록)
-            3) (선택) 총평: 이번 MR로 해결된 사항 요약(예: "그룹명 오타 정정 완료"처럼 '이미 반영됨'을 명확히 기재)
-            
-            [변경사항 unified diff]
-            %s
-            """,
-			diffs == null ? 0 : diffs.size(),
+				%s
+				
+				%s
+				
+				다음 변경사항에 대해 위의 규칙을 지켜 리뷰를 작성하세요.
+				
+				[컨텍스트]
+				- 변경 파일 수: %d
+				- 변경 파일 목록(상위 %d개까지 표시):
+				%s
+				
+				[변경사항]
+				%s
+				""",
+			BASE_PROMPT,
+			personaContent,
+			diffs.size(),
 			MAX_FILE_LIST,
 			fileList,
 			diffContent
@@ -174,16 +236,11 @@ public class PromptService {
 
 	/**
 	 * 변경된 파일 목록을 생성합니다.
-	 * 최대 MAX_FILE_LIST 개까지만 표시하여 프롬프트 길이를 제한합니다.
 	 *
 	 * @param diffs 변경사항 목록
 	 * @return 포맷된 파일 목록 문자열
 	 */
 	private String generateFileList(List<Diff> diffs) {
-		if (diffs == null || diffs.isEmpty()) {
-			return "- (변경 파일 정보 없음)";
-		}
-
 		return diffs.stream()
 			.limit(MAX_FILE_LIST)
 			.map(d -> "  - " + (d.getNewPath() != null ? d.getNewPath() : d.getOldPath()))
@@ -192,37 +249,14 @@ public class PromptService {
 
 	/**
 	 * diff 정보를 프롬프트 형식으로 포맷합니다.
-	 * 각 파일별로 변경사항을 마크다운 코드 블록으로 감싸서 가독성을 높입니다.
 	 *
 	 * @param diffs 변경사항 목록
 	 * @return 포맷된 diff 문자열
 	 */
 	private String formatDiffsForPrompt(List<Diff> diffs) {
-		if (diffs == null || diffs.isEmpty()) {
-			return "(diff 없음)";
-		}
-
 		return diffs.stream()
 			.map(diff -> "File: " + (diff.getNewPath() != null ? diff.getNewPath() : diff.getOldPath())
 				+ "\n```diff\n" + (diff.getDiff() == null ? "" : diff.getDiff()) + "\n```")
 			.collect(Collectors.joining("\n\n"));
-	}
-
-	/**
-	 * 시스템 프롬프트와 사용자 프롬프트를 결합합니다.
-	 * Gemini 같이 분리된 프롬프트를 지원하지 않는 API용으로 사용됩니다.
-	 *
-	 * @param systemPrompt 시스템 프롬프트
-	 * @param userPrompt 사용자 프롬프트
-	 * @return 결합된 프롬프트
-	 */
-	private String combinePrompts(String systemPrompt, String userPrompt) {
-		return String.format("""
-            %s
-            
-            ---
-            
-            %s
-            """, systemPrompt, userPrompt);
 	}
 }

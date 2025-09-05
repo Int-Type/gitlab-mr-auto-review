@@ -12,7 +12,10 @@ import lombok.NoArgsConstructor;
  * LLM(Large Language Model) 통합 설정 Properties
  *
  * <p>다양한 LLM 서비스(OpenAI, Claude, Gemini)의 설정을 통합 관리합니다.
- * 통합 설정이 개별 LLM 설정보다 우선순위를 가집니다.</p>
+ * 통합 설정이 개별 LLM 설정보다 우선순위를 가집니다.
+ *
+ * 주의: systemPrompt 필드는 더 이상 사용되지 않으며,
+ * 모든 프롬프트는 PromptService에서 하드코딩으로 관리됩니다.</p>
  *
  * @author inttype
  * @since 1.0
@@ -27,6 +30,11 @@ public class LLMProps {
 	private String apiUrl;
 	private String apiKey;
 	private String model;
+
+	/**
+	 * @deprecated 더 이상 사용되지 않음. PromptService에서 하드코딩된 프롬프트 사용
+	 */
+	@Deprecated(since = "1.0", forRemoval = true)
 	private String systemPrompt;
 
 	// OpenAI 호환 API 사용 여부
