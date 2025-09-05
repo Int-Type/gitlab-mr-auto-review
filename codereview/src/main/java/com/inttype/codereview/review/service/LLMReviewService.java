@@ -67,8 +67,8 @@ public class LLMReviewService {
 			log.debug("통합 LLM 리뷰 생성 시작 - 어댑터: {}, 파일 수: {}",
 				adapter.getClass().getSimpleName(), diffs.size());
 
-			// 4. 리뷰 생성 (완전한 프롬프트를 사용자 프롬프트로 전달)
-			return adapter.generateReview(diffs, "")
+			// 4. 리뷰 생성 (완전한 프롬프트를 systemPrompt로 전달)
+			return adapter.generateReview(diffs, completePrompt)
 				.doOnSuccess(review -> log.debug("통합 LLM 리뷰 생성 완료 - 길이: {}", review.length()))
 				.doOnError(error -> log.error("통합 LLM 리뷰 생성 실패", error));
 

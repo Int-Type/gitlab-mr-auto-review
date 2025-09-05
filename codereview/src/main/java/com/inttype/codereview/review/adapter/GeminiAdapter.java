@@ -2,7 +2,6 @@ package com.inttype.codereview.review.adapter;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.gitlab4j.api.models.Diff;
 import org.springframework.stereotype.Component;
@@ -12,7 +11,6 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import com.inttype.codereview.review.config.LLMProps;
 import com.inttype.codereview.review.exception.LLMException;
-import com.inttype.codereview.review.service.PromptService;
 
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +21,8 @@ import reactor.core.publisher.Mono;
  * Google Gemini API를 위한 어댑터 구현체
  *
  * <p>Gemini Pro 등 Google의 Gemini 모델들과의 통신을 담당합니다.
- * Google AI API 형식에 맞춰 요청/응답을 처리하고 에러를 변환합니다.</p>
+ * Google AI API 형식에 맞춰 요청/응답을 처리하고 에러를 변환합니다.
+ * 완전한 프롬프트를 받아서 처리하는 새로운 방식을 사용합니다.</p>
  *
  * @author inttype
  * @since 1.0
@@ -34,13 +33,15 @@ import reactor.core.publisher.Mono;
 public class GeminiAdapter implements LLMAdapter {
 
 	private final LLMProps llmProps;
-	private final PromptService promptService;
 
 	/**
 	 * Gemini API를 통해 코드 리뷰를 생성합니다.
 	 *
-	 * @param diffs GitLab MR의 변경사항 목록
-	 * @param systemPrompt 시스템 프롬프트
+	 * <p>완전한 프롬프트를 사용자 메시지로 전달하여 리뷰를 생성합니다.
+	 * systemPrompt 파라미터는 사용되지 않습니다.</p>
+	 *
+	 * @param diffs GitLab MR의 변경사항 목록 (사용되지 않음, 호환성 유지용)
+	 * @param systemPrompt 시스템 프롬프트 (사용되지 않음, 호환성 유지용)
 	 * @return 생성된 리뷰 내용
 	 */
 	@Override
@@ -54,20 +55,41 @@ public class GeminiAdapter implements LLMAdapter {
 			));
 		}
 
+		// systemPrompt가 실제 완전한 프롬프트인 경우 (새로운 방식)
+		if (StringUtils.hasText(systemPrompt)) {
+			return generateReviewWithCompletePrompt(systemPrompt);
+		}
+
+		// 레거시 호환성: systemPrompt가 비어있는 경우 에러
+		return Mono.error(new LLMException(
+			LLMException.ErrorType.INVALID_FORMAT,
+			"Gemini",
+			"완전한 프롬프트가 제공되지 않았습니다."
+		));
+	}
+
+	/**
+	 * 완전한 프롬프트를 사용하여 Gemini API로 리뷰를 생성합니다.
+	 *
+	 * @param completePrompt 완성된 프롬프트
+	 * @return 생성된 리뷰 내용
+	 */
+	public Mono<String> generateReviewWithCompletePrompt(String completePrompt) {
+		if (!isAvailable()) {
+			return Mono.error(new LLMException(
+				LLMException.ErrorType.INVALID_API_KEY,
+				"Gemini",
+				"Gemini API 키가 설정되지 않았습니다."
+			));
+		}
+
 		try {
-			// WebClient 생성 (수정된 베이스 URL)
-			WebClient webClient = createWebClient();
-
-			// 프롬프트 생성
-			String userPrompt = promptService.getUserPrompt(diffs);
-			String combinedPrompt = combinePrompts(systemPrompt, userPrompt);
-
-			// Gemini API 요청 형식으로 변환
+			// Gemini API 요청 형식으로 변환 (완전한 프롬프트를 텍스트로 전달)
 			Map<String, Object> request = Map.of(
 				"contents", List.of(
 					Map.of(
 						"parts", List.of(
-							Map.of("text", combinedPrompt)
+							Map.of("text", completePrompt)
 						)
 					)
 				),
@@ -79,11 +101,12 @@ public class GeminiAdapter implements LLMAdapter {
 				)
 			);
 
-			log.debug("Gemini API 요청 시작 - 모델: {}, 파일 수: {}",
-				getModelName(), diffs != null ? diffs.size() : 0);
+			log.debug("Gemini API 요청 시작 - 모델: {}, 프롬프트 길이: {}",
+				getModelName(), completePrompt.length());
 
-			// 수정된 URI 패턴 (전체 URL을 직접 사용)
-			String fullUrl = String.format("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
+			// 완전한 URL 생성 (API 키 포함)
+			String fullUrl = String.format(
+				"https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
 				getModelName(), getApiKey());
 
 			log.debug("요청 URL: {}", fullUrl.replace(getApiKey(), "***"));
@@ -107,41 +130,6 @@ public class GeminiAdapter implements LLMAdapter {
 				e
 			));
 		}
-	}
-
-	/**
-	 * Gemini API 전용 WebClient를 생성합니다.
-	 * Gemini API는 URL 파라미터로 API 키를 전달합니다.
-	 *
-	 * @return 설정된 WebClient 인스턴스
-	 */
-	private WebClient createWebClient() {
-		String apiUrl = llmProps.getGemini() != null && StringUtils.hasText(llmProps.getGemini().getApiUrl())
-			? llmProps.getGemini().getApiUrl()
-			: "https://generativelanguage.googleapis.com/v1beta";
-
-		return WebClient.builder()
-			.baseUrl(apiUrl)
-			.defaultHeader("Content-Type", "application/json")
-			.build();
-	}
-
-	/**
-	 * 시스템 프롬프트와 사용자 프롬프트를 결합합니다.
-	 * Gemini는 별도의 시스템 프롬프트를 지원하지 않으므로 하나로 결합합니다.
-	 *
-	 * @param systemPrompt 시스템 프롬프트
-	 * @param userPrompt 사용자 프롬프트
-	 * @return 결합된 프롬프트
-	 */
-	private String combinePrompts(String systemPrompt, String userPrompt) {
-		return String.format("""
-            %s
-            
-            ---
-            
-            %s
-            """, systemPrompt, userPrompt);
 	}
 
 	/**
@@ -171,7 +159,7 @@ public class GeminiAdapter implements LLMAdapter {
 			);
 		}
 
-		List<Map<String, Object>> candidates = (List<Map<String, Object>>) candidatesObj;
+		List<Map<String, Object>> candidates = (List<Map<String, Object>>)candidatesObj;
 		if (candidates.isEmpty()) {
 			throw new LLMException(
 				LLMException.ErrorType.INVALID_FORMAT,
@@ -190,7 +178,7 @@ public class GeminiAdapter implements LLMAdapter {
 			);
 		}
 
-		Map<String, Object> content = (Map<String, Object>) contentObj;
+		Map<String, Object> content = (Map<String, Object>)contentObj;
 		Object partsObj = content.get("parts");
 		if (!(partsObj instanceof List)) {
 			throw new LLMException(
@@ -200,7 +188,7 @@ public class GeminiAdapter implements LLMAdapter {
 			);
 		}
 
-		List<Map<String, Object>> parts = (List<Map<String, Object>>) partsObj;
+		List<Map<String, Object>> parts = (List<Map<String, Object>>)partsObj;
 		if (parts.isEmpty()) {
 			throw new LLMException(
 				LLMException.ErrorType.INVALID_FORMAT,
@@ -212,7 +200,7 @@ public class GeminiAdapter implements LLMAdapter {
 		Map<String, Object> firstPart = parts.get(0);
 		Object textObj = firstPart.get("text");
 
-		if (!(textObj instanceof String) || !StringUtils.hasText((String) textObj)) {
+		if (!(textObj instanceof String) || !StringUtils.hasText((String)textObj)) {
 			throw new LLMException(
 				LLMException.ErrorType.INVALID_FORMAT,
 				"Gemini",
@@ -220,7 +208,7 @@ public class GeminiAdapter implements LLMAdapter {
 			);
 		}
 
-		return (String) textObj;
+		return (String)textObj;
 	}
 
 	/**

@@ -62,13 +62,8 @@ public class PersonaReviewService {
 
 			// Gemini처럼 시스템/사용자 프롬프트 분리를 지원하지 않는 API의 경우
 			// 완전한 프롬프트를 사용자 프롬프트로 전달하고 시스템 프롬프트는 빈 문자열 사용
-			return adapter.generateReview(diffs, "")
-				.map(reviewContent -> formatReviewWithPersona(selection, reviewContent))
-				.onErrorResume(error -> {
-					// generateReview 실패 시 완전한 프롬프트로 직접 처리하는 fallback 로직
-					log.warn("기본 generateReview 실패, 완전한 프롬프트로 재시도: {}", error.getMessage());
-					return generateReviewWithCompletePrompt(completePrompt, selection);
-				});
+			return adapter.generateReview(diffs, completePrompt)
+				.map(reviewContent -> formatReviewWithPersona(selection, reviewContent));
 
 		} catch (Exception e) {
 			log.error("페르소나 기반 리뷰 생성 중 오류 발생", e);
