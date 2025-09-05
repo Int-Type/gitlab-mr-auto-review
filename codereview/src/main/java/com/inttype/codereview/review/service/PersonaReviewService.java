@@ -146,30 +146,13 @@ public class PersonaReviewService {
 	 * @return 최종 포맷팅된 리뷰 내용
 	 */
 	private String formatReviewWithPersona(PersonaSelection selection, String reviewContent) {
-		StringBuilder formattedReview = new StringBuilder();
-
 		// AI 코드 리뷰임을 명시하는 헤더 추가
-		formattedReview.append(String.format("## %s %s AI 코드 리뷰\n\n",
+		String formattedReview = String.format("## %s %s AI 코드 리뷰\n\n",
 			selection.selectedPersona().getEmoji(),
-			selection.selectedPersona().getDisplayName()));
-
-		// 실제 리뷰 내용
-		formattedReview.append(reviewContent);
-
-		// 추가 점검 필요 페르소나가 있는 경우 멘트 추가
-		if (!selection.additionalPersonas().isEmpty()) {
-			formattedReview.append("\n\n---\n");
-			formattedReview.append("**추가 점검 권장 영역**: ");
-
-			String additionalMentions = selection.additionalPersonas().stream()
-				.map(persona -> String.format("%s %s", persona.getEmoji(), persona.getDisplayName()))
-				.collect(Collectors.joining(", "));
-
-			formattedReview.append(additionalMentions);
-			formattedReview.append(" 관점에서도 검토해보시기 바랍니다.");
-		}
-
-		return formattedReview.toString();
+			selection.selectedPersona().getDisplayName())
+			// 실제 리뷰 내용
+			+ reviewContent;
+		return formattedReview;
 	}
 
 	/**
