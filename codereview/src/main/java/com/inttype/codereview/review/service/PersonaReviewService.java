@@ -77,29 +77,6 @@ public class PersonaReviewService {
 	}
 
 	/**
-	 * 완전한 프롬프트를 사용하여 리뷰를 생성하는 fallback 메서드
-	 * Gemini와 같이 시스템/사용자 프롬프트 분리를 지원하지 않는 API용
-	 *
-	 * @param completePrompt 완성된 프롬프트 (시스템 + 사용자 프롬프트 결합)
-	 * @param selection 선택된 페르소나 정보
-	 * @return 생성된 리뷰 내용
-	 */
-	private Mono<String> generateReviewWithCompletePrompt(String completePrompt, PersonaSelection selection) {
-		// TODO: 여기서는 LLM 어댑터의 직접적인 API 호출이 필요할 수 있음
-		// 현재는 기본 에러 메시지 반환
-		String errorReview = String.format("""
-				%s %s가 리뷰를 시도했지만 일시적인 오류가 발생했습니다.
-				
-				안녕하세요. MR 잘 봤습니다. 현재 시스템 문제로 상세한 리뷰를 제공하지 못해 죄송합니다.
-				관리자에게 문의하시거나 잠시 후 다시 시도해주세요.
-				""",
-			selection.selectedPersona().getEmoji(),
-			selection.selectedPersona().getDisplayName());
-
-		return Mono.just(formatReviewWithPersona(selection, errorReview));
-	}
-
-	/**
 	 * 페르소나별 점수를 기반으로 최적의 페르소나를 선택합니다.
 	 *
 	 * @param scores 페르소나별 점수 맵
@@ -146,13 +123,11 @@ public class PersonaReviewService {
 	 * @return 최종 포맷팅된 리뷰 내용
 	 */
 	private String formatReviewWithPersona(PersonaSelection selection, String reviewContent) {
-		// AI 코드 리뷰임을 명시하는 헤더 추가
-		String formattedReview = String.format("## %s %s AI 코드 리뷰\n\n",
+		// AI 코드 리뷰임을 명시하는 헤더와 실제 리뷰 내용을 결합
+		return String.format("## %s %s AI 코드 리뷰\n\n%s",
 			selection.selectedPersona().getEmoji(),
-			selection.selectedPersona().getDisplayName())
-			// 실제 리뷰 내용
-			+ reviewContent;
-		return formattedReview;
+			selection.selectedPersona().getDisplayName(),
+			reviewContent);
 	}
 
 	/**
