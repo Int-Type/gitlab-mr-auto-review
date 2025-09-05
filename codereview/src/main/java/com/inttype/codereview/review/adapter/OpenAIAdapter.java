@@ -1,7 +1,6 @@
 package com.inttype.codereview.review.adapter;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.gitlab4j.api.models.Diff;
 import org.springframework.stereotype.Component;
@@ -14,7 +13,6 @@ import com.inttype.codereview.review.dto.ChatMessage;
 import com.inttype.codereview.review.dto.ChatRequest;
 import com.inttype.codereview.review.dto.ChatResponse;
 import com.inttype.codereview.review.exception.LLMException;
-import com.inttype.codereview.review.service.PromptService;
 
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +23,8 @@ import reactor.core.publisher.Mono;
  * OpenAI API를 위한 어댑터 구현체
  *
  * <p>GPT-4, GPT-4o-mini 등 OpenAI 모델들과의 통신을 담당합니다.
- * OpenAI API 형식에 맞춰 요청/응답을 처리하고 에러를 변환합니다.</p>
+ * OpenAI API 형식에 맞춰 요청/응답을 처리하고 에러를 변환합니다.
+ * 완전한 프롬프트를 받아서 처리하는 새로운 방식을 사용합니다.</p>
  *
  * @author inttype
  * @since 1.0
@@ -38,13 +37,15 @@ public class OpenAIAdapter implements LLMAdapter {
 	private static final double DEFAULT_TEMPERATURE = 0.2;
 
 	private final LLMProps llmProps;
-	private final PromptService promptService;
 
 	/**
 	 * OpenAI API를 통해 코드 리뷰를 생성합니다.
 	 *
-	 * @param diffs GitLab MR의 변경사항 목록
-	 * @param systemPrompt 시스템 프롬프트
+	 * <p>완전한 프롬프트를 사용자 메시지로 전달하여 리뷰를 생성합니다.
+	 * systemPrompt 파라미터는 사용되지 않습니다.</p>
+	 *
+	 * @param diffs GitLab MR의 변경사항 목록 (사용되지 않음, 호환성 유지용)
+	 * @param systemPrompt 시스템 프롬프트 (사용되지 않음, 호환성 유지용)
 	 * @return 생성된 리뷰 내용
 	 */
 	@Override
@@ -58,25 +59,49 @@ public class OpenAIAdapter implements LLMAdapter {
 			));
 		}
 
+		// systemPrompt가 실제 완전한 프롬프트인 경우 (새로운 방식)
+		if (StringUtils.hasText(systemPrompt)) {
+			return generateReviewWithCompletePrompt(systemPrompt);
+		}
+
+		// 레거시 호환성: systemPrompt가 비어있는 경우 에러
+		return Mono.error(new LLMException(
+			LLMException.ErrorType.INVALID_FORMAT,
+			"OpenAI",
+			"완전한 프롬프트가 제공되지 않았습니다."
+		));
+	}
+
+	/**
+	 * 완전한 프롬프트를 사용하여 OpenAI API로 리뷰를 생성합니다.
+	 *
+	 * @param completePrompt 완성된 프롬프트
+	 * @return 생성된 리뷰 내용
+	 */
+	public Mono<String> generateReviewWithCompletePrompt(String completePrompt) {
+		if (!isAvailable()) {
+			return Mono.error(new LLMException(
+				LLMException.ErrorType.INVALID_API_KEY,
+				"OpenAI",
+				"OpenAI API 키가 설정되지 않았습니다."
+			));
+		}
+
 		try {
 			// WebClient 생성 (OpenAI 전용 설정)
 			WebClient webClient = createWebClient();
 
-			// 프롬프트 생성
-			String userPrompt = promptService.getUserPrompt(diffs);
-
-			// API 요청 생성
+			// API 요청 생성 (완전한 프롬프트를 사용자 메시지로 전달)
 			ChatRequest request = new ChatRequest(
 				getModelName(),
 				List.of(
-					new ChatMessage("system", systemPrompt),
-					new ChatMessage("user", userPrompt)
+					new ChatMessage("user", completePrompt)
 				),
 				DEFAULT_TEMPERATURE
 			);
 
-			log.debug("OpenAI API 요청 시작 - 모델: {}, 파일 수: {}",
-				getModelName(), diffs != null ? diffs.size() : 0);
+			log.debug("OpenAI API 요청 시작 - 모델: {}, 프롬프트 길이: {}",
+				getModelName(), completePrompt.length());
 
 			// API 호출 및 응답 처리
 			return webClient.post()

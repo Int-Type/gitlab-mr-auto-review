@@ -2,7 +2,6 @@ package com.inttype.codereview.review.adapter;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.gitlab4j.api.models.Diff;
 import org.springframework.stereotype.Component;
@@ -12,7 +11,6 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import com.inttype.codereview.review.config.LLMProps;
 import com.inttype.codereview.review.exception.LLMException;
-import com.inttype.codereview.review.service.PromptService;
 
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +21,8 @@ import reactor.core.publisher.Mono;
  * Claude API를 위한 어댑터 구현체
  *
  * <p>Claude 4 시리즈 모델들과의 통신을 담당합니다.
- * Anthropic API 형식에 맞춰 요청/응답을 처리하고 에러를 변환합니다.</p>
+ * Anthropic API 형식에 맞춰 요청/응답을 처리하고 에러를 변환합니다.
+ * 완전한 프롬프트를 받아서 처리하는 새로운 방식을 사용합니다.</p>
  *
  * @author inttype
  * @since 1.0
@@ -36,13 +35,15 @@ public class ClaudeAdapter implements LLMAdapter {
 	private static final int MAX_TOKENS = 4096;
 
 	private final LLMProps llmProps;
-	private final PromptService promptService;
 
 	/**
 	 * Claude API를 통해 코드 리뷰를 생성합니다.
 	 *
-	 * @param diffs GitLab MR의 변경사항 목록
-	 * @param systemPrompt 시스템 프롬프트
+	 * <p>완전한 프롬프트를 사용자 메시지로 전달하여 리뷰를 생성합니다.
+	 * systemPrompt 파라미터는 사용되지 않습니다.</p>
+	 *
+	 * @param diffs GitLab MR의 변경사항 목록 (사용되지 않음, 호환성 유지용)
+	 * @param systemPrompt 시스템 프롬프트 (사용되지 않음, 호환성 유지용)
 	 * @return 생성된 리뷰 내용
 	 */
 	@Override
@@ -56,28 +57,52 @@ public class ClaudeAdapter implements LLMAdapter {
 			));
 		}
 
+		// systemPrompt가 실제 완전한 프롬프트인 경우 (새로운 방식)
+		if (StringUtils.hasText(systemPrompt)) {
+			return generateReviewWithCompletePrompt(systemPrompt);
+		}
+
+		// 레거시 호환성: systemPrompt가 비어있는 경우 에러
+		return Mono.error(new LLMException(
+			LLMException.ErrorType.INVALID_FORMAT,
+			"Claude",
+			"완전한 프롬프트가 제공되지 않았습니다."
+		));
+	}
+
+	/**
+	 * 완전한 프롬프트를 사용하여 Claude API로 리뷰를 생성합니다.
+	 *
+	 * @param completePrompt 완성된 프롬프트
+	 * @return 생성된 리뷰 내용
+	 */
+	public Mono<String> generateReviewWithCompletePrompt(String completePrompt) {
+		if (!isAvailable()) {
+			return Mono.error(new LLMException(
+				LLMException.ErrorType.INVALID_API_KEY,
+				"Claude",
+				"Claude API 키가 설정되지 않았습니다."
+			));
+		}
+
 		try {
 			// WebClient 생성 (Claude 전용 설정)
 			WebClient webClient = createWebClient();
 
-			// 프롬프트 생성
-			String userPrompt = promptService.getUserPrompt(diffs);
-
-			// Claude API 요청 형식으로 변환
+			// Claude API 요청 형식으로 변환 (완전한 프롬프트를 사용자 메시지로 전달)
 			Map<String, Object> request = Map.of(
 				"model", getModelName(),
 				"max_tokens", MAX_TOKENS,
-				"system", systemPrompt,
 				"messages", List.of(
 					Map.of(
 						"role", "user",
-						"content", userPrompt
+						"content", completePrompt
 					)
 				)
 			);
 
-			log.debug("Claude API 요청 시작 - 모델: {}, 파일 수: {}",
-				getModelName(), diffs != null ? diffs.size() : 0);
+			log.debug("Claude API 요청 시작 - 모델: {}, 프롬프트 길이: {}",
+				getModelName(), completePrompt.length());
 
 			// API 호출 및 응답 처리
 			return webClient.post()
@@ -146,7 +171,7 @@ public class ClaudeAdapter implements LLMAdapter {
 			);
 		}
 
-		List<Map<String, Object>> contentList = (List<Map<String, Object>>) contentObj;
+		List<Map<String, Object>> contentList = (List<Map<String, Object>>)contentObj;
 		if (contentList.isEmpty()) {
 			throw new LLMException(
 				LLMException.ErrorType.INVALID_FORMAT,
@@ -158,7 +183,7 @@ public class ClaudeAdapter implements LLMAdapter {
 		Map<String, Object> firstContent = contentList.get(0);
 		Object textObj = firstContent.get("text");
 
-		if (!(textObj instanceof String) || !StringUtils.hasText((String) textObj)) {
+		if (!(textObj instanceof String) || !StringUtils.hasText((String)textObj)) {
 			throw new LLMException(
 				LLMException.ErrorType.INVALID_FORMAT,
 				"Claude",
@@ -166,7 +191,7 @@ public class ClaudeAdapter implements LLMAdapter {
 			);
 		}
 
-		return (String) textObj;
+		return (String)textObj;
 	}
 
 	/**
