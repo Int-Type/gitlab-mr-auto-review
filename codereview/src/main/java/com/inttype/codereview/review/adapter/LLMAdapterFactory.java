@@ -27,12 +27,6 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class LLMAdapterFactory {
 
-	private final OpenAIAdapter openAIAdapter;
-	private final ClaudeAdapter claudeAdapter;
-	private final GeminiAdapter geminiAdapter;
-	private final GmsAdapter gmsAdapter;
-	private final LLMProps llmProps;
-
 	// 모델명 패턴을 기반으로 어댑터를 매핑하는 맵
 	private static final Map<String, String> MODEL_TO_ADAPTER = new HashMap<>();
 
@@ -53,6 +47,12 @@ public class LLMAdapterFactory {
 		MODEL_TO_ADAPTER.put("gemini-1.5", "gemini");
 		MODEL_TO_ADAPTER.put("bison", "gemini");
 	}
+
+	private final OpenAIAdapter openAIAdapter;
+	private final ClaudeAdapter claudeAdapter;
+	private final GeminiAdapter geminiAdapter;
+	private final GmsAdapter gmsAdapter;
+	private final LLMProps llmProps;
 
 	/**
 	 * 설정된 모델에 적합한 LLM 어댑터를 반환합니다.
@@ -157,6 +157,7 @@ public class LLMAdapterFactory {
 
 	/**
 	 * 모델명을 기반으로 적절한 어댑터 타입을 결정합니다.
+	 * GMS 모델 우선 검사 후 다른 패턴을 확인합니다.
 	 *
 	 * @param model 모델명
 	 * @return 어댑터 타입 ("openai", "claude", "gemini", "gms")
@@ -168,17 +169,20 @@ public class LLMAdapterFactory {
 
 		String lowerModel = model.toLowerCase();
 
-		// 정확한 매칭 먼저 시도
+		// GMS 우선 검사 (gms-gpt-4o-mini 같은 패턴을 위해)
+		if (lowerModel.contains("gms") || lowerModel.contains("ssafy")) {
+			return "gms";
+		}
+
+		// 기존 정확한 매칭 시도
 		for (Map.Entry<String, String> entry : MODEL_TO_ADAPTER.entrySet()) {
 			if (lowerModel.contains(entry.getKey().toLowerCase())) {
 				return entry.getValue();
 			}
 		}
 
-		// 패턴 매칭으로 fallback
-		if (lowerModel.contains("gms") || lowerModel.contains("ssafy")) {
-			return "gms";
-		} else if (lowerModel.contains("gpt") || lowerModel.contains("openai")) {
+		// 나머지 패턴 매칭
+		if (lowerModel.contains("gpt") || lowerModel.contains("openai")) {
 			return "openai";
 		} else if (lowerModel.contains("claude") || lowerModel.contains("anthropic")) {
 			return "claude";
