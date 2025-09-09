@@ -30,6 +30,7 @@ public class LLMAdapterFactory {
 	private final OpenAIAdapter openAIAdapter;
 	private final ClaudeAdapter claudeAdapter;
 	private final GeminiAdapter geminiAdapter;
+	private final GmsAdapter gmsAdapter;
 	private final LLMProps llmProps;
 
 	// 모델명 패턴을 기반으로 어댑터를 매핑하는 맵
@@ -91,7 +92,7 @@ public class LLMAdapterFactory {
 	 * @return 사용 가능한 어댑터 목록
 	 */
 	public List<LLMAdapter> getAvailableAdapters() {
-		return List.of(openAIAdapter, claudeAdapter, geminiAdapter)
+		return List.of(openAIAdapter, claudeAdapter, geminiAdapter, gmsAdapter)
 			.stream()
 			.filter(LLMAdapter::isAvailable)
 			.toList();
@@ -100,7 +101,7 @@ public class LLMAdapterFactory {
 	/**
 	 * 특정 어댑터 타입이 사용 가능한지 확인합니다.
 	 *
-	 * @param adapterType 어댑터 타입 ("openai", "claude", "gemini")
+	 * @param adapterType 어댑터 타입 ("openai", "claude", "gemini", "gms")
 	 * @return 사용 가능한 경우 true
 	 */
 	public boolean isAdapterAvailable(String adapterType) {
@@ -144,6 +145,12 @@ public class LLMAdapterFactory {
 			return llmProps.getGemini().getModel();
 		}
 
+		if (llmProps.getGms() != null &&
+			StringUtils.hasText(llmProps.getGms().getApiKey()) &&
+			StringUtils.hasText(llmProps.getGms().getModel())) {
+			return llmProps.getGms().getModel();
+		}
+
 		// 3. fallback: 기본값
 		return "gpt-4o-mini";
 	}
@@ -152,7 +159,7 @@ public class LLMAdapterFactory {
 	 * 모델명을 기반으로 적절한 어댑터 타입을 결정합니다.
 	 *
 	 * @param model 모델명
-	 * @return 어댑터 타입 ("openai", "claude", "gemini")
+	 * @return 어댑터 타입 ("openai", "claude", "gemini", "gms")
 	 */
 	private String determineAdapterType(String model) {
 		if (!StringUtils.hasText(model)) {
@@ -169,7 +176,9 @@ public class LLMAdapterFactory {
 		}
 
 		// 패턴 매칭으로 fallback
-		if (lowerModel.contains("gpt") || lowerModel.contains("openai")) {
+		if (lowerModel.contains("gms") || lowerModel.contains("ssafy")) {
+			return "gms";
+		} else if (lowerModel.contains("gpt") || lowerModel.contains("openai")) {
 			return "openai";
 		} else if (lowerModel.contains("claude") || lowerModel.contains("anthropic")) {
 			return "claude";
@@ -194,6 +203,7 @@ public class LLMAdapterFactory {
 			case "openai" -> openAIAdapter;
 			case "claude" -> claudeAdapter;
 			case "gemini" -> geminiAdapter;
+			case "gms" -> gmsAdapter;
 			default -> throw new LLMException(
 				LLMException.ErrorType.INVALID_FORMAT,
 				"Factory",
@@ -215,6 +225,7 @@ public class LLMAdapterFactory {
 		log.info("OpenAI 사용 가능: {}", isAdapterAvailable("openai"));
 		log.info("Claude 사용 가능: {}", isAdapterAvailable("claude"));
 		log.info("Gemini 사용 가능: {}", isAdapterAvailable("gemini"));
+		log.info("GMS 사용 가능: {}", isAdapterAvailable("gms"));
 		log.info("==================");
 	}
 }

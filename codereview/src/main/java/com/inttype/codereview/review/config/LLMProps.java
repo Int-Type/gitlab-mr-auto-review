@@ -45,6 +45,7 @@ public class LLMProps {
 	private OpenAI openai;
 	private Claude claude;
 	private Gemini gemini;
+	private Gms gms;
 
 	/**
 	 * OpenAI 개별 설정
@@ -89,5 +90,20 @@ public class LLMProps {
 		private String apiKey;
 		@Builder.Default
 		private String model = "gemini-2.5-pro";
+	}
+
+	/**
+	 * SSAFY GMS 개별 설정
+	 */
+	@Data
+	@Builder
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class Gms {
+		@Builder.Default
+		private String apiUrl = "https://gms.ssafy.io/gmsapi/api.openai.com/v1";
+		private String apiKey;
+		@Builder.Default
+		private String model = "gpt-4o-mini";
 	}
 }
